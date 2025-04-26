@@ -1,0 +1,4 @@
+AI team
+    1. symptom analysis is done using API call and done by word matching. Should be ideally done using a model.
+    2. All messages are not being logged. Need a way to build context and store messages.
+    3. Need to figure out data structures, features and call flows for the agent. 
