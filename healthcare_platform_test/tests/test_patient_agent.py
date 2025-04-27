@@ -328,6 +328,7 @@ def generate_patient_response(state: PatientAgentState) -> PatientAgentState:
         If providing medical information, keep it simple and non-technical.
         
         Context information is provided to help you create a personalized response.
+        Answer in 2-3 lines.
         """
     
     # Use Llama for response generation
@@ -428,24 +429,29 @@ def process_patient_input(input_data: PatientInputSchema) -> PatientAgentState:
     
     return initial_state
 
-def format_patient_output(final_state: PatientAgentState) -> PatientOutputSchema:
+def format_patient_output(final_state: Union[PatientAgentState, Dict]) -> PatientOutputSchema:
     """Format the agent's final state into output for WhatsApp."""
+    # Extract final_response from either PatientAgentState or AddableValuesDict
+    final_response = final_state.final_response if isinstance(final_state, PatientAgentState) else final_state.get('final_response', '')
+    
     output = PatientOutputSchema(
         user_id="user123",  # This would come from the input in real implementation
         response_type="text",
-        message=final_state.final_response
+        message=final_response
     )
     
     # Add appointment details if available
-    if "matched_doctors" in final_state.context:
+    context = final_state.context if isinstance(final_state, PatientAgentState) else final_state.get('context', {})
+    if "matched_doctors" in context:
         output.response_type = "options"
         output.suggested_actions = [
             {"type": "book", "doctor_id": doc["doctor_id"], "label": f"Book with {doc['name']}"}
-            for doc in final_state.context["matched_doctors"].get("doctors", [])[:3]
+            for doc in context["matched_doctors"].get("doctors", [])[:3]
         ]
     
     # Add appointment confirmation if booking was done
-    for tool_output in final_state.tool_outputs:
+    tool_outputs = final_state.tool_outputs if isinstance(final_state, PatientAgentState) else final_state.get('tool_outputs', [])
+    for tool_output in tool_outputs:
         if tool_output["tool_name"] == "appointment_booking" and tool_output["output"]["status"] == "success":
             output.response_type = "appointment_confirmation"
             output.appointment_details = tool_output["output"]
