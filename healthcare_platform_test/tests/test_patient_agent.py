@@ -4,6 +4,7 @@ from typing import Dict, List, Any, Optional, Union
 import json
 from pathlib import Path
 from groq_llama_helper import groq_llama_invoke, langchain_to_groq_messages
+from datetime import datetime
 
 # Add the src directory to the path so we can import from it
 src_path = Path(__file__).resolve().parent.parent / "src"
@@ -478,6 +479,39 @@ def patient_agent_interface(input_data: dict) -> dict:
     print(f"\n--- Final response ---\n{output.message}\n")
     
     return output.dict()
+
+def process_patient_message(
+    message_content: str,
+    user_id: str,
+    message_type: str = "text",
+    previous_context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Process a patient message and return a response.
+    This is the main entry point for developer integration.
+    
+    Args:
+        message_content (str): The message from the patient
+        user_id (str): Unique identifier for the patient
+        message_type (str): Type of message (text, voice, image)
+        previous_context (dict, optional): Previous conversation context
+        
+    Returns:
+        dict: Response containing message, suggested actions, etc.
+    """
+    # Create input data structure
+    input_data = {
+        "user_id": user_id,
+        "message_type": message_type,
+        "message_content": message_content,
+        "timestamp": datetime.now().isoformat(),
+        "previous_context": previous_context or {}
+    }
+    
+    # Process through patient agent
+    response = patient_agent_interface(input_data)
+    
+    return response
 
 if __name__ == "__main__":
     # Check if Llama model exists
