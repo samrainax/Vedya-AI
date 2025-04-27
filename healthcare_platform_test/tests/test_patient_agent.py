@@ -3,6 +3,7 @@ import os
 from typing import Dict, List, Any, Optional, Union
 import json
 from pathlib import Path
+from groq_llama_helper import groq_llama_invoke, langchain_to_groq_messages
 
 # Add the src directory to the path so we can import from it
 src_path = Path(__file__).resolve().parent.parent / "src"
@@ -56,8 +57,7 @@ def patient_intent_classification(state: PatientAgentState) -> PatientAgentState
     messages = state.messages
     
     # Prepare the prompt for intent classification
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are an AI assistant for a healthcare platform serving rural patients.
+    system_prompt = """You are an AI assistant for a healthcare platform serving rural patients.
         Classify the patient's intent based on their message into one of these categories:
         - NEW_APPOINTMENT: Patient wants to book a new doctor appointment
         - RESCHEDULE: Patient wants to change an existing appointment
@@ -69,22 +69,26 @@ def patient_intent_classification(state: PatientAgentState) -> PatientAgentState
         - UNCLEAR: Intent is not clear from the message
 
         Respond with just the intent category.
-        """),
-        MessagesPlaceholder(variable_name="messages")
-    ])
+        """
     
     # Use Llama to classify intent
-    callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
-    llm = LlamaCpp(
-        model_path=LLAMA_MODEL_PATH,
-        temperature=0.1,
-        max_tokens=100,
-        top_p=0.95,
-        callback_manager=callback_manager,
-        verbose=False,
-    )
+    # callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+    # llm = LlamaCpp(
+    #     model_path=LLAMA_MODEL_PATH,
+    #     temperature=0.1,
+    #     max_tokens=100,
+    #     top_p=0.95,
+    #     callback_manager=callback_manager,
+    #     verbose=False,
+    # )
     
-    response = llm.invoke(prompt.invoke({"messages": messages}).to_string())
+    # response = llm.invoke(prompt.invoke({"messages": messages}).to_string())
+
+    prompt_messages = [
+    {"role": "system", "content": system_prompt},
+    ] + langchain_to_groq_messages(messages)
+
+    response = groq_llama_invoke(prompt_messages)
     
     # Extract intent from response
     intent = response.strip()
@@ -103,8 +107,7 @@ def patient_information_extraction(state: PatientAgentState) -> PatientAgentStat
     current_intent = state.current_intent
     
     # Prepare the prompt for information extraction
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", f"""You are an AI assistant for a healthcare platform.
+    system_prompt = """You are an AI assistant for a healthcare platform.
         Extract relevant information from the patient's message based on their intent: {current_intent}.
         
         For NEW_APPOINTMENT or SYMPTOM_CHECK:
@@ -118,23 +121,26 @@ def patient_information_extraction(state: PatientAgentState) -> PatientAgentStat
         - Extract any new time preferences (for reschedule)
         
         Return the information as a JSON object with appropriate fields.
-        """),
-        MessagesPlaceholder(variable_name="messages")
-    ])
+        """
+    # # Use Llama for extraction
+    # callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+    # llm = LlamaCpp(
+    #     model_path=LLAMA_MODEL_PATH,
+    #     temperature=0.1,
+    #     max_tokens=500,
+    #     top_p=0.95,
+    #     callback_manager=callback_manager,
+    #     verbose=False,
+    # )
     
-    # Use Llama for extraction
-    callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
-    llm = LlamaCpp(
-        model_path=LLAMA_MODEL_PATH,
-        temperature=0.1,
-        max_tokens=500,
-        top_p=0.95,
-        callback_manager=callback_manager,
-        verbose=False,
-    )
-    
-    response = llm.invoke(prompt.invoke({"messages": messages}).to_string())
-    
+    # response = llm.invoke(prompt.invoke({"messages": messages}).to_string())
+
+    prompt_messages = [
+    {"role": "system", "content": system_prompt.format(current_intent=current_intent)},
+    ] + langchain_to_groq_messages(messages)
+
+    response = groq_llama_invoke(prompt_messages)
+        
     print(f"\nExtracted information response: {response}")
     
     # Try to parse JSON from response
@@ -312,8 +318,7 @@ def generate_patient_response(state: PatientAgentState) -> PatientAgentState:
     """Generate a natural language response for the patient."""
     print("\nGenerating response to patient")
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are an AI assistant for a healthcare platform serving rural patients.
+    system_prompt = """You are an AI assistant for a healthcare platform serving rural patients.
         Based on the conversation context and the information gathered, generate a helpful,
         clear, and concise response in a friendly tone. The patients are mostly from rural
         areas with limited technology access, so keep language simple and instructions clear.
@@ -323,29 +328,35 @@ def generate_patient_response(state: PatientAgentState) -> PatientAgentState:
         If providing medical information, keep it simple and non-technical.
         
         Context information is provided to help you create a personalized response.
-        """),
-        MessagesPlaceholder(variable_name="messages"),
-        ("system", "Context information: {context}")
-    ])
+        """
     
     # Use Llama for response generation
-    callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
-    llm = LlamaCpp(
-        model_path=LLAMA_MODEL_PATH,
-        temperature=0.7,
-        max_tokens=1000,
-        top_p=0.95,
-        callback_manager=callback_manager,
-        verbose=False,
-    )
+    # callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+    # llm = LlamaCpp(
+    #     model_path=LLAMA_MODEL_PATH,
+    #     temperature=0.7,
+    #     max_tokens=1000,
+    #     top_p=0.95,
+    #     callback_manager=callback_manager,
+    #     verbose=False,
+    # )
     
+    # context_str = json.dumps(state.context, indent=2)
+    # print(f"Using context: {context_str[:200]}...")  # Print just the beginning to avoid clutter
+    
+    # response = llm.invoke(prompt.invoke({
+    #     "messages": state.messages,
+    #     "context": context_str
+    # }).to_string())
+
     context_str = json.dumps(state.context, indent=2)
-    print(f"Using context: {context_str[:200]}...")  # Print just the beginning to avoid clutter
-    
-    response = llm.invoke(prompt.invoke({
-        "messages": state.messages,
-        "context": context_str
-    }).to_string())
+
+    prompt_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": f"Context information: {context_str}"}
+    ] + langchain_to_groq_messages(state.messages)
+
+    response = groq_llama_invoke(prompt_messages)
     
     state.final_response = response
     return state
@@ -390,7 +401,7 @@ def create_patient_agent() -> StateGraph:
 class PatientInputSchema(BaseModel):
     """Schema for the input from WhatsApp to the Patient Agent."""
     user_id: str
-    message_type: str = "text"  # "text", "voice", "image"
+    message_type: str = "text"  # "text", "voice", "image" # add more types
     message_content: str
     timestamp: str
     previous_context: Optional[Dict[str, Any]] = None
@@ -496,7 +507,7 @@ if __name__ == "__main__":
         print(f"\n\n{'='*80}")
         print(f"TEST CASE {i+1}: {test_input['message_content']}")
         print(f"{'='*80}\n")
-        
+        ## input here comes from a service linking to WhatsApp - Dev Input
         result = patient_agent_interface(test_input)
         print(f"\nOutput schema: {json.dumps(result, indent=2)}")
         print(f"\n{'='*80}\n")
