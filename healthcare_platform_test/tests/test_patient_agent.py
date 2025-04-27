@@ -23,7 +23,7 @@ from langgraph.graph import StateGraph, END, START
 import enum
 
 # Configure the path to your Llama model
-LLAMA_MODEL_PATH = "..\models\llama-2-7b-chat.Q2_K.gguf"  # Update this path
+# LLAMA_MODEL_PATH = "..\models\llama-2-7b-chat.Q2_K.gguf"  # Update this path
 
 # Initialize dummy services
 services = DummyServices()
@@ -475,10 +475,10 @@ def patient_agent_interface(input_data: dict) -> dict:
 
 if __name__ == "__main__":
     # Check if Llama model exists
-    if not os.path.exists(LLAMA_MODEL_PATH):
-        print(f"Error: Llama model not found at {LLAMA_MODEL_PATH}")
-        print("Please update the LLAMA_MODEL_PATH variable to point to your downloaded model.")
-        sys.exit(1)
+    # if not os.path.exists(LLAMA_MODEL_PATH):
+    #     print(f"Error: Llama model not found at {LLAMA_MODEL_PATH}")
+    #     print("Please update the LLAMA_MODEL_PATH variable to point to your downloaded model.")
+    #     sys.exit(1)
     
     # Example patient inputs for testing
     test_inputs = [
