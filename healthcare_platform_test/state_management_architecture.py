@@ -3,10 +3,15 @@ users_state = 1
 kb_categoriser = '''General Medicine, Orthopedics, Cardiology'''
 
 from groq import Groq
+import os
+from dotenv import load_dotenv
 
-GROQ_API_KEY = "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"
+load_dotenv()
 
-client = Groq()
+if not os.getenv("GROQ_API_KEY"):
+    print("API key not found")
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 hospital_doctors = {
     "General Medicine": [
         {"name": "Dr. Anil Kumar", "qualification": "MBBS, MD (General Medicine)", "experience_years": 12},
