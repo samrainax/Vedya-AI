@@ -1,0 +1,24 @@
+[
+	{
+		"name": "Dr. Neeraj Sinha",
+		"qualification": "MBBS, MD, DM (Cardiology)",
+		"experience_years": 14,
+		"slots": {
+			"2024-03-20": ["9:30 AM - 10:30 AM", "3:30 PM - 4:30 PM"],
+			"2024-03-21": ["10:30 AM - 11:30 AM", "4:30 PM - 5:30 PM"],
+			"2024-03-22": ["9:30 AM - 10:30 AM", "3:30 PM - 4:30 PM"]
+		},
+		"booked_appointments": []
+	},
+	{
+		"name": "Dr. Pooja Bansal",
+		"qualification": "MBBS, MD (Medicine), Fellowship in Cardiology",
+		"experience_years": 9,
+		"slots": {
+			"2024-03-20": ["11:30 AM - 12:30 PM", "5:00 PM - 6:00 PM"],
+			"2024-03-21": ["10:30 AM - 11:30 AM", "4:00 PM - 5:00 PM"],
+			"2024-03-22": ["11:30 AM - 12:30 PM", "5:00 PM - 6:00 PM"]
+		},
+		"booked_appointments": []
+	}
+]

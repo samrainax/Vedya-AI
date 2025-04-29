@@ -1,0 +1,24 @@
+[
+	{
+		"name": "Dr. Anil Kumar",
+		"qualification": "MBBS, MD (General Medicine)",
+		"experience_years": 12,
+		"slots": {
+			"2024-03-20": ["9:00 AM - 10:00 AM", "4:00 PM - 5:00 PM"],
+			"2024-03-21": ["10:00 AM - 11:00 AM", "3:00 PM - 4:00 PM"],
+			"2024-03-22": ["9:00 AM - 10:00 AM", "4:00 PM - 5:00 PM"]
+		},
+		"booked_appointments": []
+	},
+	{
+		"name": "Dr. Sneha Rathi",
+		"qualification": "MBBS, DNB (Internal Medicine)",
+		"experience_years": 8,
+		"slots": {
+			"2024-03-20": ["10:00 AM - 11:00 AM", "5:00 PM - 6:00 PM"],
+			"2024-03-21": ["9:00 AM - 10:00 AM", "4:00 PM - 5:00 PM"],
+			"2024-03-22": ["11:00 AM - 12:00 PM", "5:00 PM - 6:00 PM"]
+		},
+		"booked_appointments": []
+	}
+]

@@ -1,0 +1,35 @@
+[
+	{
+		"name": "Dr. Ramesh Yadav",
+		"qualification": "MBBS, MS (Orthopedics)",
+		"experience_years": 10,
+		"slots": {
+			"2024-03-20": ["9:00 AM - 11:00 AM", "3:00 PM - 4:00 PM"],
+			"2024-03-21": ["10:00 AM - 12:00 PM", "4:00 PM - 5:00 PM"],
+			"2024-03-22": ["9:00 AM - 11:00 AM", "3:00 PM - 4:00 PM"]
+		},
+		"booked_appointments": []
+	},
+	{
+		"name": "Dr. Priya Mehra",
+		"qualification": "MBBS, Diploma in Orthopedics",
+		"experience_years": 6,
+		"slots": {
+			"2024-03-20": ["11:00 AM - 12:00 PM", "4:00 PM - 5:00 PM"],
+			"2024-03-21": ["9:00 AM - 10:00 AM", "3:00 PM - 4:00 PM"],
+			"2024-03-22": ["10:00 AM - 11:00 AM", "4:00 PM - 5:00 PM"]
+		},
+		"booked_appointments": []
+	},
+	{
+		"name": "Dr. Arvind Sharma",
+		"qualification": "MBBS, MS (Ortho)",
+		"experience_years": 15,
+		"slots": {
+			"2024-03-20": ["2:00 PM - 3:00 PM", "5:00 PM - 6:00 PM"],
+			"2024-03-21": ["1:00 PM - 2:00 PM", "4:00 PM - 5:00 PM"],
+			"2024-03-22": ["2:00 PM - 3:00 PM", "5:00 PM - 6:00 PM"]
+		},
+		"booked_appointments": []
+	}
+]
