@@ -1,17 +1,12 @@
-users_state = 1
+users_state = 0
 
 kb_categoriser = '''General Medicine, Orthopedics, Cardiology'''
 
 from groq import Groq
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+GROQ_API_KEY = "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"
 
-if not os.getenv("GROQ_API_KEY"):
-    print("API key not found")
-
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq()
 hospital_doctors = {
     "General Medicine": [
         {"name": "Dr. Anil Kumar", "qualification": "MBBS, MD (General Medicine)", "experience_years": 12},
@@ -66,6 +61,7 @@ doctor_available_slots = {
     }
 }
 
+#place holders for the state management
 curr_category = ""
 curr_doctor = ""
 selected_slot = ""
@@ -231,7 +227,146 @@ def generate_reply(incoming_msg, phone_number=""):
     else:
         generate_reply.conversation_history = []
 
-    if users_state == 1:
+    # State 0: Moderator - Route to appropriate state based on query
+    if users_state == 0:
+        print("\n[STATE 0] Moderator analyzing query...")
+        prompt = f'''You are Vedya, a friendly and helpful hospital receptionist. Your task is to:
+        1. Engage in natural conversation with the user
+        2. Transition to State 1 (categorizer) IMMEDIATELY when any health issue is mentioned
+        3. Handle general queries and small talk
+        4. Maintain a friendly and professional tone
+
+        Available states:
+        - State 1: Health concern classification (TRANSITION IMMEDIATELY when user mentions any health issue)
+        - State 2: Doctor selection (ONLY when user has already selected a category and EXPLICITLY wants to choose a doctor)
+        - State 3: Appointment booking (ONLY when user has already selected a doctor and EXPLICITLY wants to book a slot)
+
+        Special cases to handle:
+        - "cancel my appointment" -> Handle cancellation
+        - "change my appointment" -> Handle modification
+        - "show my appointments" -> Show booking history
+        - "help" -> Show available commands
+        - "start over" -> Reset to State 1
+        - "exit" or "bye" -> End conversation
+
+        Conversation history:
+        {generate_reply.conversation_history[-4:] if hasattr(generate_reply, 'conversation_history') else "No history"}
+
+        Current booking status:
+        - Category: {curr_category if curr_category else "None"}
+        - Doctor: {curr_doctor if curr_doctor else "None"}
+        - Date: {selected_date if selected_date else "None"}
+        - Slot: {selected_slot if selected_slot else "None"}
+
+        Give your response in this format (as a valid JSON object):
+        {{
+            "bot_response": "your friendly response",
+            "next_state": 1 or 2 or 3 or null,
+            "special_action": "cancel" or "modify" or "show" or "help" or "reset" or "exit" or null,
+            "needs_context": true or false,
+            "is_general_conversation": true or false
+        }}
+
+        Important:
+        - Keep the conversation natural and friendly
+        - Set "next_state" to 1 IMMEDIATELY when user mentions ANY health issue, including:
+          * Physical symptoms (pain, discomfort, illness)
+          * Mental health concerns
+          * General health questions
+          * Medical conditions
+          * Health-related complaints
+        - Set "is_general_conversation" to true for:
+          * Casual greetings and small talk
+          * General questions about the hospital
+          * Simple acknowledgments (ok, thanks, etc.)
+          * Follow-up questions
+          * Any response that doesn't mention health issues
+        - Only set "next_state" to 2 or 3 when user has already selected a category/doctor
+        - For general conversation without health issues, keep "next_state" as null
+        - If special action is needed, set "special_action" accordingly
+        - If more context is needed, set "needs_context" to true
+        '''
+        messages[0]["content"] = prompt
+
+        # Send to LLM for analysis
+        messages.append({"role": "user", "content": incoming_msg})
+        completion = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=messages,
+            temperature=0.3,
+            max_completion_tokens=1024,
+            top_p=1.0,
+            stream=True,
+            stop=None,
+        )
+
+        response_chunks = []
+        print("\n[DEBUG] LLM Response:")
+        for chunk in completion:
+            delta = chunk.choices[0].delta.content or ""
+            print(delta, end="", flush=True)
+            response_chunks.append(delta)
+        print()
+
+        response_text = "".join(response_chunks)
+        messages.append({"role": "assistant", "content": response_text})
+        
+        # Update conversation history
+        generate_reply.conversation_history.extend([
+            {"role": "user", "content": incoming_msg},
+            {"role": "assistant", "content": response_text}
+        ])
+
+        # Parse moderator response
+        parsed_response = parse_llm_response(response_text)
+        
+        # Handle special actions
+        if parsed_response.get("special_action"):
+            if parsed_response["special_action"] == "cancel":
+                return "I'll help you cancel your appointment. Please provide your appointment details."
+            elif parsed_response["special_action"] == "modify":
+                return "I'll help you modify your appointment. Please provide your current appointment details."
+            elif parsed_response["special_action"] == "show":
+                return "Here are your recent appointments: [Appointment history would be shown here]"
+            elif parsed_response["special_action"] == "help":
+                return '''Here are the available commands:
+                - "I need to see a doctor" -> Start new appointment
+                - "Show me available doctors" -> View doctors list
+                - "Book an appointment" -> Start booking process
+                - "Cancel my appointment" -> Cancel existing appointment
+                - "Change my appointment" -> Modify existing appointment
+                - "Show my appointments" -> View appointment history
+                - "Help" -> Show this help message
+                - "Start over" -> Reset conversation
+                - "Exit" or "Bye" -> End conversation'''
+            elif parsed_response["special_action"] == "reset":
+                users_state = 1
+                curr_category = ""
+                curr_doctor = ""
+                selected_slot = ""
+                selected_date = ""
+                return "Let's start fresh. How can I help you today?"
+            elif parsed_response["special_action"] == "exit":
+                return "Thank you for using our service. Goodbye!"
+        
+        # Handle general conversation
+        if parsed_response.get("is_general_conversation", False):
+            return parsed_response["bot_response"]
+        
+        # Route to appropriate state only if there's clear intent
+        if parsed_response.get("next_state"):
+            users_state = parsed_response["next_state"]
+            print(f"[DEBUG] Moderator routing to State {users_state}")
+            return parsed_response["bot_response"]
+        
+        # If needs more context
+        if parsed_response.get("needs_context", False):
+            return parsed_response["bot_response"]
+        
+        # Default response - stay in general conversation
+        return parsed_response["bot_response"]
+
+    elif users_state == 1:
         print("\n[STATE 1] Understanding user's health issue...")
         prompt = f'''You are Vedya, a receptionist at a hospital. Your task is to:
         1. Quickly understand the user's main health concern
@@ -268,6 +403,66 @@ def generate_reply(incoming_msg, phone_number=""):
         - Set "wants_recommendation" to true if they want recommendations, false if they don't, null if not asked yet
         '''
         messages[0]["content"] = prompt
+
+        # Send to LLM for analysis
+        messages.append({"role": "user", "content": incoming_msg})
+        completion = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=messages,
+            temperature=0.3,
+            max_completion_tokens=1024,
+            top_p=1.0,
+            stream=True,
+            stop=None,
+        )
+
+        response_chunks = []
+        print("\n[DEBUG] LLM Response:")
+        for chunk in completion:
+            delta = chunk.choices[0].delta.content or ""
+            print(delta, end="", flush=True)
+            response_chunks.append(delta)
+        print()
+
+        response_text = "".join(response_chunks)
+        messages.append({"role": "assistant", "content": response_text})
+        
+        # Update conversation history
+        generate_reply.conversation_history.extend([
+            {"role": "user", "content": incoming_msg},
+            {"role": "assistant", "content": response_text}
+        ])
+
+        # Parse moderator response
+        parsed_response = parse_llm_response(response_text)
+        
+        # Handle category-related logic if we're in State 1
+        if "category" in parsed_response and (parsed_response["category"] is not None and 
+            parsed_response["category"] in hospital_doctors and 
+            not parsed_response.get("needs_more_info", True)):
+            
+            if parsed_response.get("wants_recommendation") is False:
+                print("\n[STATE TRANSITION] User doesn't want recommendations")
+                users_state = 0  # Return to moderator
+                curr_category = ""  # Reset category
+                return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
+            
+            if parsed_response.get("wants_recommendation") is True:
+                print(f"\n[STATE TRANSITION] Category identified: {parsed_response['category']}")
+                curr_category = parsed_response["category"]
+                users_state = 2
+                print("[DEBUG] Moving to State 2: Doctor Selection")
+                # Return the doctor list directly
+                list_of_docs = fetch_recommendations(curr_category)
+                doctors_list = "\n".join([f"{i+1}. {doc['name']} - {doc['qualification']} ({doc['experience_years']} years experience)" 
+                                        for i, doc in enumerate(list_of_docs)])
+                return f"Here are our {curr_category} specialists:\n{doctors_list}\nPlease let me know which doctor you would like to consult."
+            
+            # If wants_recommendation is null, ask if they want recommendations
+            return f"I've classified your concern under {parsed_response['category']}. Would you like me to recommend a doctor for your {parsed_response['category']} concern?"
+        
+        # For non-category related responses in State 1, return the bot response
+        return parsed_response["bot_response"]
 
     elif users_state == 2:
         print(f"\n[STATE 2] Fetching doctors for category: {curr_category}")
@@ -343,8 +538,13 @@ def generate_reply(incoming_msg, phone_number=""):
             selected_slot = extract_time_slot(incoming_msg, doctor_available_slots[curr_doctor][selected_date])
             if selected_slot:
                 print(f"\n[STATE TRANSITION] Slot selected: {selected_slot} on {selected_date}")
-                users_state = 1  # Reset state for next booking
-                print("[DEBUG] Moving back to State 1: Category Selection")
+                # Reset all booking-related variables
+                curr_category = ""
+                curr_doctor = ""
+                selected_date = ""
+                selected_slot = ""
+                users_state = 0  # Return to moderator
+                print("[DEBUG] Moving back to State 0: Moderator")
                 return f"Appointment booked with {curr_doctor} on {selected_date} at {selected_slot}"
             
             # If no slot extracted, show available slots again
@@ -386,12 +586,15 @@ def generate_reply(incoming_msg, phone_number=""):
     print(f"[DEBUG] Parsed response: {parsed_response}")
 
     if users_state == 1:
-        if (parsed_response["category"] is not None and 
+        # Only process category-related logic if we're in State 1
+        if "category" in parsed_response and (parsed_response["category"] is not None and 
             parsed_response["category"] in hospital_doctors and 
             not parsed_response.get("needs_more_info", True)):
             
             if parsed_response.get("wants_recommendation") is False:
                 print("\n[STATE TRANSITION] User doesn't want recommendations")
+                users_state = 0  # Return to moderator
+                curr_category = ""  # Reset category
                 return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
             
             if parsed_response.get("wants_recommendation") is True:
@@ -407,7 +610,10 @@ def generate_reply(incoming_msg, phone_number=""):
             
             # If wants_recommendation is null, ask if they want recommendations
             return f"I've classified your concern under {parsed_response['category']}. Would you like me to recommend a doctor for your {parsed_response['category']} concern?"
-            
+        
+        # For non-category related responses in State 1, return the bot response
+        return parsed_response["bot_response"]
+
     elif users_state == 2:
         # Check if user mentioned a doctor's name using flexible matching
         selected_doctor = extract_doctor_name(incoming_msg, fetch_recommendations(curr_category))
@@ -424,6 +630,9 @@ def generate_reply(incoming_msg, phone_number=""):
         if parsed_response["doctor"] is not None and parsed_response["doctor"] in doctor_available_slots:
             if parsed_response.get("wants_booking") is False:
                 print("\n[STATE TRANSITION] User doesn't want to book appointment")
+                users_state = 0  # Return to moderator
+                curr_category = ""  # Reset category
+                curr_doctor = ""    # Reset doctor
                 return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
                 
             if parsed_response.get("wants_booking") is True:
@@ -454,8 +663,13 @@ def generate_reply(incoming_msg, phone_number=""):
             
             if selected_slot:
                 print(f"\n[STATE TRANSITION] Slot selected: {selected_slot} on {parsed_response['date']}")
-                users_state = 1  # Reset state for next booking
-                print("[DEBUG] Moving back to State 1: Category Selection")
+                # Reset all booking-related variables
+                curr_category = ""
+                curr_doctor = ""
+                selected_date = ""
+                selected_slot = ""
+                users_state = 0  # Return to moderator
+                print("[DEBUG] Moving back to State 0: Moderator")
                 return f"Appointment booked with {curr_doctor} on {parsed_response['date']} at {selected_slot}"
             
             # If no time slot selected yet, show available slots
