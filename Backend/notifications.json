@@ -1,0 +1,24 @@
+[
+  {
+    "id": "6221d21a-4ce0-4def-863d-9d2871abab33",
+    "appointmentId": "9",
+    "recipientType": "patient",
+    "timingType": "hour_before",
+    "receiverWhatsappNumber": "+918527005289",
+    "message": "Dear James Rodriguez,\n\nThis is a reminder that your appointment with Dr. Davis is in one hour at 10:33 PM. We're looking forward to seeing you soon.",
+    "messagePushTimestamp": 1746032579,
+    "status": "sent",
+    "createdAt": 1746032541
+  },
+  {
+    "id": "12c9f3fa-a6da-498c-82fd-46c4e591a2da",
+    "appointmentId": "9",
+    "recipientType": "doctor",
+    "timingType": "hour_before",
+    "receiverWhatsappNumber": "+918527005289",
+    "message": "Dear Dr. Davis,\n\nThis is a reminder that your appointment with patient James Rodriguez is in one hour at 10:33 PM.",
+    "messagePushTimestamp": 1746032579,
+    "status": "sent",
+    "createdAt": 1746032541
+  }
+]

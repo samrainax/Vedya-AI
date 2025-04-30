@@ -1,0 +1,4 @@
+twilio==7.16.0
+apscheduler==3.10.1
+watchdog==3.0.0
+python-dotenv==1.0.0 
