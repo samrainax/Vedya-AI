@@ -6,7 +6,7 @@ from groq import Groq
 
 GROQ_API_KEY = "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"
 
-client = Groq()
+client = Groq(api_key=GROQ_API_KEY)
 hospital_doctors = {
     "General Medicine": [
         {"name": "Dr. Anil Kumar", "qualification": "MBBS, MD (General Medicine)", "experience_years": 12},
@@ -202,6 +202,106 @@ def extract_date(message):
             return date
     
     return None
+
+def extract_patient_info(messages):
+    """Extract patient information from conversation history using LLM"""
+    prompt = '''Extract patient information from the conversation history.
+    Look for:
+    1. Patient's name
+    2. Patient's phone number
+    3. Patient's concern in brief
+    
+    If any information is missing, use "Unknown" for name and "0000000000" for phone number.
+    
+    Return the information in this JSON format:
+    {
+        "name": "patient name",
+        "number": "phone number"
+        "concern": "concern in brief"
+    }
+    '''
+
+    messages.insert(0, {"role": "system", "content": prompt})
+    
+    completion = client.chat.completions.create(
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=messages,
+        temperature=0.3,
+        max_completion_tokens=1024,
+        top_p=1.0,
+        stream=True,
+        stop=None,
+    )
+
+    response_chunks = []
+    for chunk in completion:
+        delta = chunk.choices[0].delta.content or ""
+        response_chunks.append(delta)
+    
+    response_text = "".join(response_chunks)
+    
+    try:
+        import json
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        return {"name": "Unknown", "number": "0000000000"}
+
+def create_appointment_object(patient_name, patient_number, doctor_name, appointment_date, appointment_time, patient_concern):
+    """Create an appointment object with the given details"""
+    # Generate a unique appointment ID (in production, this would come from a database)
+    appointment_id = str(len(open('Backend/appointments.json').readlines()) + 1)
+    
+    # Create doctor mapping for IDs and numbers (in production, this would come from a database)
+    doctor_mapping = {
+        "Dr. Anil Kumar": {"id": "DOC001", "number": "1234567890"},
+        "Dr. Sneha Rathi": {"id": "DOC002", "number": "1234567891"},
+        "Dr. Ramesh Yadav": {"id": "DOC003", "number": "1234567892"},
+        "Dr. Priya Mehra": {"id": "DOC004", "number": "1234567893"},
+        "Dr. Arvind Sharma": {"id": "DOC005", "number": "1234567894"},
+        "Dr. Neeraj Sinha": {"id": "DOC006", "number": "1234567895"},
+        "Dr. Pooja Bansal": {"id": "DOC007", "number": "1234567896"}
+    }
+    
+    # Get doctor details from mapping
+    doctor_details = doctor_mapping.get(doctor_name, {"id": "DOC000", "number": "0000000000"})
+    
+    # Create the appointment object
+    appointment = {
+        "appointmentId": appointment_id,
+        "patientId": "PAT" + appointment_id.zfill(5),  # Generate a dummy patient ID
+        "patientName": patient_name,
+        "patientNumber": patient_number,
+        "doctorNumber": doctor_details["number"],
+        "doctorId": doctor_details["id"],
+        "doctorName": doctor_name,
+        "appointmentDate": appointment_date,
+        "appointmentTime": appointment_time,
+        "appointmentStatus": "confirmed",
+        "patientConcern": patient_concern
+    }
+    
+    return appointment
+    
+def append_appointment_to_json(appointment):
+    """Append the appointment object to appointments.json"""
+    try:
+        import json
+        # Read existing appointments
+        with open('Backend/appointments.json', 'r') as file:
+            appointments = json.load(file)
+        
+        # Append new appointment
+        appointments.append(appointment)
+        
+        # Write back to file
+        with open('Backend/appointments.json', 'w') as file:
+            json.dump(appointments, file, indent=4)
+        
+        return True
+    except Exception as e:
+        print(f"Error saving appointment: {str(e)}")
+        return False
+
 
 def generate_reply(incoming_msg, phone_number=""):
     global users_state, curr_category, curr_doctor, selected_slot, selected_date
@@ -538,18 +638,34 @@ def generate_reply(incoming_msg, phone_number=""):
             selected_slot = extract_time_slot(incoming_msg, doctor_available_slots[curr_doctor][selected_date])
             if selected_slot:
                 print(f"\n[STATE TRANSITION] Slot selected: {selected_slot} on {selected_date}")
-                # Reset all booking-related variables
-                curr_category = ""
-                curr_doctor = ""
-                selected_date = ""
-                selected_slot = ""
-                users_state = 0  # Return to moderator
+
+                patient_info = extract_patient_info(messages)
+
+                appointment = create_appointment_object(
+                    patient_name=patient_info.get("name", "Unknown"),
+                    patient_number=patient_info.get("number", "0000000000"),
+                    doctor_name=curr_doctor,
+                    appointment_date=selected_date,
+                    appointment_time=selected_slot,
+                    patient_concern=patient_info.get("concern", curr_category)
+                )
+
+                if append_appointment_to_json(appointment):
+                    print(f"[DEBUG] Appointment saved to appointments.json: {appointment}")
+
                 print("[DEBUG] Moving back to State 0: Moderator")
                 return f"Appointment booked with {curr_doctor} on {selected_date} at {selected_slot}"
             
             # If no slot extracted, show available slots again
             available_slots = doctor_available_slots[curr_doctor][selected_date]
             slots_list = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(available_slots)])
+
+            # Reset all booking-related variables
+            curr_category = ""
+            curr_doctor = ""
+            selected_date = ""
+            selected_slot = ""
+            users_state = 0  # Return to moderator
             return f"Here are the available time slots for {selected_date}:\n{slots_list}\nPlease let me know which time slot you prefer."
 
     print("\n[DEBUG] Sending message to LLM...")
@@ -585,101 +701,101 @@ def generate_reply(incoming_msg, phone_number=""):
     parsed_response = parse_llm_response(response_text)
     print(f"[DEBUG] Parsed response: {parsed_response}")
 
-    if users_state == 1:
-        # Only process category-related logic if we're in State 1
-        if "category" in parsed_response and (parsed_response["category"] is not None and 
-            parsed_response["category"] in hospital_doctors and 
-            not parsed_response.get("needs_more_info", True)):
+    # if users_state == 1:
+    #     # Only process category-related logic if we're in State 1
+    #     if "category" in parsed_response and (parsed_response["category"] is not None and 
+    #         parsed_response["category"] in hospital_doctors and 
+    #         not parsed_response.get("needs_more_info", True)):
             
-            if parsed_response.get("wants_recommendation") is False:
-                print("\n[STATE TRANSITION] User doesn't want recommendations")
-                users_state = 0  # Return to moderator
-                curr_category = ""  # Reset category
-                return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
+    #         if parsed_response.get("wants_recommendation") is False:
+    #             print("\n[STATE TRANSITION] User doesn't want recommendations")
+    #             users_state = 0  # Return to moderator
+    #             curr_category = ""  # Reset category
+    #             return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
             
-            if parsed_response.get("wants_recommendation") is True:
-                print(f"\n[STATE TRANSITION] Category identified: {parsed_response['category']}")
-                curr_category = parsed_response["category"]
-                users_state = 2
-                print("[DEBUG] Moving to State 2: Doctor Selection")
-                # Return the doctor list directly
-                list_of_docs = fetch_recommendations(curr_category)
-                doctors_list = "\n".join([f"{i+1}. {doc['name']} - {doc['qualification']} ({doc['experience_years']} years experience)" 
-                                        for i, doc in enumerate(list_of_docs)])
-                return f"Here are our {curr_category} specialists:\n{doctors_list}\nPlease let me know which doctor you would like to consult."
+    #         if parsed_response.get("wants_recommendation") is True:
+    #             print(f"\n[STATE TRANSITION] Category identified: {parsed_response['category']}")
+    #             curr_category = parsed_response["category"]
+    #             users_state = 2
+    #             print("[DEBUG] Moving to State 2: Doctor Selection")
+    #             # Return the doctor list directly
+    #             list_of_docs = fetch_recommendations(curr_category)
+    #             doctors_list = "\n".join([f"{i+1}. {doc['name']} - {doc['qualification']} ({doc['experience_years']} years experience)" 
+    #                                     for i, doc in enumerate(list_of_docs)])
+    #             return f"Here are our {curr_category} specialists:\n{doctors_list}\nPlease let me know which doctor you would like to consult."
             
-            # If wants_recommendation is null, ask if they want recommendations
-            return f"I've classified your concern under {parsed_response['category']}. Would you like me to recommend a doctor for your {parsed_response['category']} concern?"
+    #         # If wants_recommendation is null, ask if they want recommendations
+    #         return f"I've classified your concern under {parsed_response['category']}. Would you like me to recommend a doctor for your {parsed_response['category']} concern?"
         
-        # For non-category related responses in State 1, return the bot response
-        return parsed_response["bot_response"]
+    #     # For non-category related responses in State 1, return the bot response
+    #     return parsed_response["bot_response"]
 
-    elif users_state == 2:
-        # Check if user mentioned a doctor's name using flexible matching
-        selected_doctor = extract_doctor_name(incoming_msg, fetch_recommendations(curr_category))
-        if selected_doctor:
-            print(f"\n[STATE TRANSITION] Doctor selected: {selected_doctor}")
-            curr_doctor = selected_doctor
-            users_state = 3
-            print("[DEBUG] Moving to State 3: Slot Selection")
-            # Show available dates immediately after doctor confirmation
-            available_dates = list(doctor_available_slots[curr_doctor].keys())
-            dates_list = "\n".join([f"{i+1}. {date}" for i, date in enumerate(available_dates)])
-            return f"Great! Here are the available dates for Dr. {curr_doctor.split('Dr. ')[1]}:\n{dates_list}\nPlease let me know which date you prefer."
+    # elif users_state == 2:
+    #     # Check if user mentioned a doctor's name using flexible matching
+    #     selected_doctor = extract_doctor_name(incoming_msg, fetch_recommendations(curr_category))
+    #     if selected_doctor:
+    #         print(f"\n[STATE TRANSITION] Doctor selected: {selected_doctor}")
+    #         curr_doctor = selected_doctor
+    #         users_state = 3
+    #         print("[DEBUG] Moving to State 3: Slot Selection")
+    #         # Show available dates immediately after doctor confirmation
+    #         available_dates = list(doctor_available_slots[curr_doctor].keys())
+    #         dates_list = "\n".join([f"{i+1}. {date}" for i, date in enumerate(available_dates)])
+    #         return f"Great! Here are the available dates for Dr. {curr_doctor.split('Dr. ')[1]}:\n{dates_list}\nPlease let me know which date you prefer."
             
-        if parsed_response["doctor"] is not None and parsed_response["doctor"] in doctor_available_slots:
-            if parsed_response.get("wants_booking") is False:
-                print("\n[STATE TRANSITION] User doesn't want to book appointment")
-                users_state = 0  # Return to moderator
-                curr_category = ""  # Reset category
-                curr_doctor = ""    # Reset doctor
-                return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
+    #     if parsed_response["doctor"] is not None and parsed_response["doctor"] in doctor_available_slots:
+    #         if parsed_response.get("wants_booking") is False:
+    #             print("\n[STATE TRANSITION] User doesn't want to book appointment")
+    #             users_state = 0  # Return to moderator
+    #             curr_category = ""  # Reset category
+    #             curr_doctor = ""    # Reset doctor
+    #             return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
                 
-            if parsed_response.get("wants_booking") is True:
-                print(f"\n[STATE TRANSITION] Doctor selected: {parsed_response['doctor']}")
-                curr_doctor = parsed_response["doctor"]
-                users_state = 3
-                print("[DEBUG] Moving to State 3: Slot Selection")
-                # Show available dates immediately after doctor confirmation
-                available_dates = list(doctor_available_slots[curr_doctor].keys())
-                dates_list = "\n".join([f"{i+1}. {date}" for i, date in enumerate(available_dates)])
-                return f"Great! Here are the available dates for Dr. {curr_doctor.split('Dr. ')[1]}:\n{dates_list}\nPlease let me know which date you prefer."
+    #         if parsed_response.get("wants_booking") is True:
+    #             print(f"\n[STATE TRANSITION] Doctor selected: {parsed_response['doctor']}")
+    #             curr_doctor = parsed_response["doctor"]
+    #             users_state = 3
+    #             print("[DEBUG] Moving to State 3: Slot Selection")
+    #             # Show available dates immediately after doctor confirmation
+    #             available_dates = list(doctor_available_slots[curr_doctor].keys())
+    #             dates_list = "\n".join([f"{i+1}. {date}" for i, date in enumerate(available_dates)])
+    #             return f"Great! Here are the available dates for Dr. {curr_doctor.split('Dr. ')[1]}:\n{dates_list}\nPlease let me know which date you prefer."
             
-            # If wants_booking is null, ask if they want to book
-            return parsed_response["bot_response"]
+    #         # If wants_booking is null, ask if they want to book
+    #         return parsed_response["bot_response"]
             
-    elif users_state == 3:
-        # Handle date selection
-        if "21st" in incoming_msg.lower() or "21" in incoming_msg:
-            selected_date = "2024-03-21"
-            available_slots = doctor_available_slots[curr_doctor][selected_date]
-            slots_list = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(available_slots)])
-            return f"Here are the available time slots for {selected_date}:\n{slots_list}\nPlease let me know which time slot you prefer."
+    # elif users_state == 3:
+    #     # Handle date selection
+    #     if "21st" in incoming_msg.lower() or "21" in incoming_msg:
+    #         selected_date = "2024-03-21"
+    #         available_slots = doctor_available_slots[curr_doctor][selected_date]
+    #         slots_list = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(available_slots)])
+    #         return f"Here are the available time slots for {selected_date}:\n{slots_list}\nPlease let me know which time slot you prefer."
         
-        # Handle time slot selection
-        if parsed_response.get("date") is not None and parsed_response["date"] in doctor_available_slots[curr_doctor]:
-            available_slots = doctor_available_slots[curr_doctor][parsed_response["date"]]
-            selected_slot = extract_time_slot(incoming_msg, available_slots)
+    #     # Handle time slot selection
+    #     if parsed_response.get("date") is not None and parsed_response["date"] in doctor_available_slots[curr_doctor]:
+    #         available_slots = doctor_available_slots[curr_doctor][parsed_response["date"]]
+    #         selected_slot = extract_time_slot(incoming_msg, available_slots)
             
-            if selected_slot:
-                print(f"\n[STATE TRANSITION] Slot selected: {selected_slot} on {parsed_response['date']}")
-                # Reset all booking-related variables
-                curr_category = ""
-                curr_doctor = ""
-                selected_date = ""
-                selected_slot = ""
-                users_state = 0  # Return to moderator
-                print("[DEBUG] Moving back to State 0: Moderator")
-                return f"Appointment booked with {curr_doctor} on {parsed_response['date']} at {selected_slot}"
+    #         if selected_slot:
+    #             print(f"\n[STATE TRANSITION] Slot selected: {selected_slot} on {parsed_response['date']}")
+    #             # Reset all booking-related variables
+    #             curr_category = ""
+    #             curr_doctor = ""
+    #             selected_date = ""
+    #             selected_slot = ""
+    #             users_state = 0  # Return to moderator
+    #             print("[DEBUG] Moving back to State 0: Moderator")
+    #             return f"Appointment booked with {curr_doctor} on {parsed_response['date']} at {selected_slot}"
             
-            # If no time slot selected yet, show available slots
-            slots_list = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(available_slots)])
-            return f"Here are the available time slots for {parsed_response['date']}:\n{slots_list}\nPlease let me know which time slot you prefer."
+    #         # If no time slot selected yet, show available slots
+    #         slots_list = "\n".join([f"{i+1}. {slot}" for i, slot in enumerate(available_slots)])
+    #         return f"Here are the available time slots for {parsed_response['date']}:\n{slots_list}\nPlease let me know which time slot you prefer."
 
-        # If no date selected yet, show available dates
-        available_dates = list(doctor_available_slots[curr_doctor].keys())
-        dates_list = "\n".join([f"{i+1}. {date}" for i, date in enumerate(available_dates)])
-        return f"Here are the available dates for {curr_doctor}:\n{dates_list}\nPlease let me know which date you prefer."
+    #     # If no date selected yet, show available dates
+    #     available_dates = list(doctor_available_slots[curr_doctor].keys())
+    #     dates_list = "\n".join([f"{i+1}. {date}" for i, date in enumerate(available_dates)])
+    #     return f"Here are the available dates for {curr_doctor}:\n{dates_list}\nPlease let me know which date you prefer."
 
     return parsed_response["bot_response"]
 
