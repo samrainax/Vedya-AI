@@ -1,0 +1,15 @@
+[
+    {
+        "appointmentId": "2",
+        "patientId": "PAT00002",
+        "patientName": "Anil",
+        "patientNumber": "0000000000",
+        "doctorNumber": "1234567890",
+        "doctorId": "DOC001",
+        "doctorName": "Dr. Anil Kumar",
+        "appointmentDate": "2024-03-22",
+        "appointmentTime": "9:00 AM -10:00 AM",
+        "appointmentStatus": "confirmed",
+        "patientConcern": "stomach ache"
+    }
+]
