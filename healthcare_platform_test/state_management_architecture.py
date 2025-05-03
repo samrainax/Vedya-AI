@@ -1,4 +1,4 @@
-users_state = 0
+users_state = {}
 
 kb_categoriser = '''General Medicine, Orthopedics, Cardiology'''
 
@@ -304,10 +304,10 @@ def append_appointment_to_json(appointment):
 
 
 def generate_reply(incoming_msg, phone_number=""):
-    global users_state, curr_category, curr_doctor, selected_slot, selected_date
+    global curr_category, curr_doctor, selected_slot, selected_date
     prompt = ""
 
-    print(f"\n[DEBUG] Current State: {users_state}")
+    print(f"\n[DEBUG] Current State: {users_state.get(phone_number, 0)}")
     print(f"[DEBUG] Current Category: {curr_category}")
     print(f"[DEBUG] Current Doctor: {curr_doctor}")
     print(f"[DEBUG] Selected Date: {selected_date}")
@@ -328,7 +328,7 @@ def generate_reply(incoming_msg, phone_number=""):
         generate_reply.conversation_history = []
 
     # State 0: Moderator - Route to appropriate state based on query
-    if users_state == 0:
+    if users_state.get(phone_number, 0) == 0:
         print("\n[STATE 0] Moderator analyzing query...")
         prompt = f'''You are Vedya, a friendly and helpful hospital receptionist. Your task is to:
         1. Engage in natural conversation with the user
@@ -440,7 +440,7 @@ def generate_reply(incoming_msg, phone_number=""):
                 - "Start over" -> Reset conversation
                 - "Exit" or "Bye" -> End conversation'''
             elif parsed_response["special_action"] == "reset":
-                users_state = 1
+                users_state[phone_number] = 1
                 curr_category = ""
                 curr_doctor = ""
                 selected_slot = ""
@@ -455,8 +455,8 @@ def generate_reply(incoming_msg, phone_number=""):
         
         # Route to appropriate state only if there's clear intent
         if parsed_response.get("next_state"):
-            users_state = parsed_response["next_state"]
-            print(f"[DEBUG] Moderator routing to State {users_state}")
+            users_state[phone_number] = parsed_response["next_state"]
+            print(f"[DEBUG] Moderator routing to State {users_state[phone_number]}")
             return parsed_response["bot_response"]
         
         # If needs more context
@@ -466,7 +466,7 @@ def generate_reply(incoming_msg, phone_number=""):
         # Default response - stay in general conversation
         return parsed_response["bot_response"]
 
-    elif users_state == 1:
+    elif users_state.get(phone_number, 0) == 1:
         print("\n[STATE 1] Understanding user's health issue...")
         prompt = f'''You are Vedya, a receptionist at a hospital. Your task is to:
         1. Quickly understand the user's main health concern
@@ -543,14 +543,14 @@ def generate_reply(incoming_msg, phone_number=""):
             
             if parsed_response.get("wants_recommendation") is False:
                 print("\n[STATE TRANSITION] User doesn't want recommendations")
-                users_state = 0  # Return to moderator
+                users_state[phone_number] = 0  # Return to moderator
                 curr_category = ""  # Reset category
                 return "Thank you for using our service. Feel free to reach out if you need any help in the future!"
             
             if parsed_response.get("wants_recommendation") is True:
                 print(f"\n[STATE TRANSITION] Category identified: {parsed_response['category']}")
                 curr_category = parsed_response["category"]
-                users_state = 2
+                users_state[phone_number] = 2
                 print("[DEBUG] Moving to State 2: Doctor Selection")
                 # Return the doctor list directly
                 list_of_docs = fetch_recommendations(curr_category)
@@ -564,7 +564,7 @@ def generate_reply(incoming_msg, phone_number=""):
         # For non-category related responses in State 1, return the bot response
         return parsed_response["bot_response"]
 
-    elif users_state == 2:
+    elif users_state.get(phone_number, 0) == 2:
         print(f"\n[STATE 2] Fetching doctors for category: {curr_category}")
         list_of_docs = fetch_recommendations(curr_category)
         print(f"[DEBUG] Available doctors: {list_of_docs}")
@@ -578,7 +578,7 @@ def generate_reply(incoming_msg, phone_number=""):
         if selected_doctor:
             print(f"\n[STATE TRANSITION] Doctor selected: {selected_doctor}")
             curr_doctor = selected_doctor
-            users_state = 3
+            users_state[phone_number] = 3
             print("[DEBUG] Moving to State 3: Slot Selection")
             # Show available dates immediately after doctor confirmation
             available_dates = list(doctor_available_slots[curr_doctor].keys())
@@ -615,7 +615,7 @@ def generate_reply(incoming_msg, phone_number=""):
         if hasattr(generate_reply, 'conversation_history'):
             messages.extend(generate_reply.conversation_history[-2:])  # Add last exchange for context
 
-    elif users_state == 3:
+    elif users_state.get(phone_number, 0) == 3:
         print(f"\n[STATE 3] Fetching slots for doctor: {curr_doctor}")
         available_slots = book_appointment(curr_doctor)
         print(f"[DEBUG] Available slots: {available_slots}")
@@ -665,7 +665,7 @@ def generate_reply(incoming_msg, phone_number=""):
             curr_doctor = ""
             selected_date = ""
             selected_slot = ""
-            users_state = 0  # Return to moderator
+            users_state[phone_number] = 0  # Return to moderator
             return f"Here are the available time slots for {selected_date}:\n{slots_list}\nPlease let me know which time slot you prefer."
 
     print("\n[DEBUG] Sending message to LLM...")
@@ -799,7 +799,7 @@ def generate_reply(incoming_msg, phone_number=""):
 
     return parsed_response["bot_response"]
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     print("\n=== Hospital Appointment Booking System ===")
     print("Type 'exit', 'quit', or 'bye' to end the conversation")
     print("bot: How can I help you today?")
