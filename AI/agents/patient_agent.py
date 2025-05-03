@@ -1,122 +1,177 @@
-from langchain.agents import Agent
-from langchain.prompts import PromptTemplate
-from langchain.tools import Tool
-from langchain.memory import ConversationBufferMemory
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-import json
-import sys
+from groq import Groq
 import os
+from dotenv import load_dotenv
+from patient_prompts import get_prompt_for_state
+import json
 
-# Add the project root to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# Load environment variables from .env file in Vedya AI folder
+load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
 
-# Import project-specific modules
-from AI.tools.appointment_tools import (
-    FindDoctorsTool,
-    BookAppointmentTool,
-    RescheduleAppointmentTool,
-    CancelAppointmentTool,
-    GetPatientAppointmentsTool
-)
-from AI.tools.patient_tools import (
-    ExtractSymptomsTool, 
-    GetPatientProfileTool,
-    UpdatePatientProfileTool
-)
+# Get API key from environment variables
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+
+# Initialize Groq client
+client = Groq(api_key=GROQ_API_KEY)
+
+class DoctorDB():
+    def __init__(self):
+        self.doctor_categories = ["General Medicine", "Orthopedics", "Cardiology"]
+        self.hospital_doctors = {
+            "General Medicine": [
+                {"id": "GM001", "name": "Dr. Anil Kumar", "qualification": "MBBS, MD (General Medicine)", "experience_years": 12, "phone": "+91 98765 43210"},
+                {"id": "GM002", "name": "Dr. Sneha Rathi", "qualification": "MBBS, DNB (Internal Medicine)", "experience_years": 8, "phone": "+91 98765 43211"}
+            ],
+            "Orthopedics": [
+                {"id": "OR001", "name": "Dr. Ramesh Yadav", "qualification": "MBBS, MS (Orthopedics)", "experience_years": 10, "phone": "+91 98765 43212"},
+                {"id": "OR002", "name": "Dr. Priya Mehra", "qualification": "MBBS, Diploma in Orthopedics", "experience_years": 6, "phone": "+91 98765 43213"},
+                {"id": "OR003", "name": "Dr. Arvind Sharma", "qualification": "MBBS, MS (Ortho)", "experience_years": 15, "phone": "+91 98765 43214"}
+            ],
+            "Cardiology": [
+                {"id": "CA001", "name": "Dr. Neeraj Sinha", "qualification": "MBBS, MD, DM (Cardiology)", "experience_years": 14, "phone": "+91 98765 43215"},
+                {"id": "CA002", "name": "Dr. Pooja Bansal", "qualification": "MBBS, MD (Medicine), Fellowship in Cardiology", "experience_years": 9, "phone": "+91 98765 43216"}
+            ]
+        }
+        self.doctor_available_slots = {
+            "Dr. Anil Kumar": {
+                "2024-03-20": ["9:00 AM - 10:00 AM", "4:00 PM - 5:00 PM"],
+                "2024-03-21": ["10:00 AM - 11:00 AM", "3:00 PM - 4:00 PM"],
+                "2024-03-22": ["9:00 AM - 10:00 AM", "4:00 PM - 5:00 PM"]
+            },
+            "Dr. Sneha Rathi": {
+                "2024-03-20": ["10:00 AM - 11:00 AM", "5:00 PM - 6:00 PM"],
+                "2024-03-21": ["9:00 AM - 10:00 AM", "4:00 PM - 5:00 PM"],
+                "2024-03-22": ["11:00 AM - 12:00 PM", "5:00 PM - 6:00 PM"]
+            },
+            "Dr. Ramesh Yadav": {
+                "2024-03-20": ["9:00 AM - 11:00 AM", "3:00 PM - 4:00 PM"],
+                "2024-03-21": ["10:00 AM - 12:00 PM", "4:00 PM - 5:00 PM"],
+                "2024-03-22": ["9:00 AM - 11:00 AM", "3:00 PM - 4:00 PM"]
+            },
+            "Dr. Priya Mehra": {
+                "2024-03-20": ["11:00 AM - 12:00 PM", "4:00 PM - 5:00 PM"],
+                "2024-03-21": ["9:00 AM - 10:00 AM", "3:00 PM - 4:00 PM"],
+                "2024-03-22": ["10:00 AM - 11:00 AM", "4:00 PM - 5:00 PM"]
+            },
+            "Dr. Arvind Sharma": {
+                "2024-03-20": ["2:00 PM - 3:00 PM", "5:00 PM - 6:00 PM"],
+                "2024-03-21": ["1:00 PM - 2:00 PM", "4:00 PM - 5:00 PM"],
+                "2024-03-22": ["2:00 PM - 3:00 PM", "5:00 PM - 6:00 PM"]
+            },
+            "Dr. Neeraj Sinha": {
+                "2024-03-20": ["9:30 AM - 10:30 AM", "3:30 PM - 4:30 PM"],
+                "2024-03-21": ["10:30 AM - 11:30 AM", "4:30 PM - 5:30 PM"],
+                "2024-03-22": ["9:30 AM - 10:30 AM", "3:30 PM - 4:30 PM"]
+            },
+            "Dr. Pooja Bansal": {
+                "2024-03-20": ["11:30 AM - 12:30 PM", "5:00 PM - 6:00 PM"],
+                "2024-03-21": ["10:30 AM - 11:30 AM", "4:00 PM - 5:00 PM"],
+                "2024-03-22": ["11:30 AM - 12:30 PM", "5:00 PM - 6:00 PM"]
+            }
+        }
 
 class PatientAgent:
-    """AI agent that handles patient interactions via WhatsApp"""
+    def __init__(self):
+        self.state = -1
+        self.current_category = ""
+        self.wants_recommendations = False
+        self.current_doctor = ""
+        self.selected_date = ""
+        self.selected_slot = ""
+        self.messages = []
+        self.doctor_db = DoctorDB()
     
-    def __init__(self, llm):
-        self.llm = llm
-        self.memory = ConversationBufferMemory()
-        self.tools = self._setup_tools()
-        self.agent = self._create_agent()
-        
-    def _setup_tools(self):
-        """Set up the tools available to the agent"""
-        # In a real implementation, these tools would be initialized with database access
-        # Here we're just showing the structure
-        return [
-            ExtractSymptomsTool(),
-            GetPatientProfileTool(),
-            UpdatePatientProfileTool(),
-            FindDoctorsTool(),
-            BookAppointmentTool(),
-            RescheduleAppointmentTool(),
-            CancelAppointmentTool(),
-            GetPatientAppointmentsTool(),
-        ]
+    def _parse_json_response(self, response):
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {"bot response": response, "next_state": None}
     
-    def _create_agent(self):
-        """Create the LangChain agent with the necessary configuration"""
-        # System message that defines the agent's behavior
-        system_message = SystemMessage(content="""You are a helpful medical assistant on WhatsApp. 
-        You help patients book appointments with doctors, reschedule or cancel appointments, 
-        and answer basic medical questions. Always be empathetic and professional.
+    def _detect_state_change(self, new_state):
+        if new_state != self.state:
+            self.state = new_state
+            return True
+        return False
         
-        When discussing symptoms:
-        1. Ask clarifying questions to understand the severity
-        2. Never diagnose conditions - your role is to connect patients with doctors
-        3. Express appropriate concern for serious symptoms
-        4. Gather relevant information about duration, intensity, and context
-        
-        For appointment booking:
-        1. Confirm patient identity
-        2. Collect symptoms and reason for visit
-        3. Help find appropriate specialists
-        4. Offer available time slots
-        5. Confirm appointment details before booking
-        
-        Always prioritize patient privacy and comply with healthcare regulations.""")
-        
-        # TODO: In a real implementation, this would be a LangChain agent with tools
-        # For now, we'll use a placeholder that will be replaced later
-        agent = "placeholder"
-        
-        return agent
+    def run_patient_agent(self):
+        while True:
+            user_input = input("You: ")
+            if user_input.lower() in ["exit", "quit"]:
+                print("Exiting the conversation...")
+                break
+            
+            if self.state == 0:
+                message = self.converse(user_input)
+                print(f"AI: {message}")
+
+            elif self.state == 1:
+                message = self.categorize(user_input)
+                parsed_message = self._parse_json_response(message)
+                if parsed_message.get("wants_recommendations").lower() == 'yes':
+                    self.state = 2
+                    self.current_category = parsed_message.get("category")
+                    self.messages.append({"role": "system", "content": get_prompt_for_state(self.state).format()})
+                elif parsed_message.get("wants_recommendations").lower() == 'no':
+                    self.state = 0
+                    self.messages.append({"role": "system", "content": get_prompt_for_state(self.state).format(current_state=self.state, current_category=self.current_category, 
+                                                                current_doctor=self.current_doctor, selected_date=self.selected_date, 
+                                                                selected_slot=self.selected_slot)})
+                    self.current_category = parsed_message.get("category")
+                print(f"AI: {parsed_message}")
+
+    def recommed_doctors(self, user_input):
+        self.messages.append({"role": "user", "content": user_input})
+
+        response = self.client.chat.completions.create(
+            model = "meta-llama/llama-4-scout-17b-16e-instruct",
+            messages = self.messages,
+            temperature = 0.2,
+            max_tokens = 1024,
+            top_p = 1,
+            stream = False,
+            stop = None,
+        )
+
+        message = response.choices[0].message.content.strip()
+        self.messages.append({"role": "assistant", "content": message})
+        return message
+
+    def categorize(self, user_input):
+        self.messages.append({"role": "user", "content": user_input})
+
+        response = self.client.chat.completions.create(
+            model = "meta-llama/llama-4-scout-17b-16e-instruct",
+            messages = self.messages,
+            temperature = 0.2,
+            max_tokens = 1024,
+            top_p = 1,
+            stream = False,
+            stop = None,
+        )
+
+        message = response.choices[0].message.content.strip()
+        self.messages.append({"role": "assistant", "content": message})
+        return message
     
-    def process_message(self, patient_id, message_text):
-        """Process an incoming message from a patient"""
-        # TODO: In a real implementation, this would use the LangChain agent
-        # For now, we'll use a simple conditional response
-        
-        # Classify intent (in a real implementation, this would be done by the LLM)
-        intent = self._classify_intent(message_text)
-        
-        if "appointment" in message_text.lower() and "book" in message_text.lower():
-            return "I'd be happy to help you book an appointment. What symptoms are you experiencing?"
-        
-        elif "reschedule" in message_text.lower():
-            return "I can help you reschedule your appointment. Which appointment would you like to change?"
-        
-        elif "cancel" in message_text.lower():
-            return "I can help you cancel your appointment. Which appointment would you like to cancel?"
-        
-        elif any(symptom in message_text.lower() for symptom in ["pain", "fever", "headache", "cough"]):
-            return "I understand you're not feeling well. Could you tell me more about your symptoms and how long you've been experiencing them?"
-        
-        else:
-            return "Thank you for your message. How can I assist you with your healthcare needs today?"
+    def converse(self, user_input):
+        self.messages.append({"role": "user", "content": user_input})
+        client = Groq(api_key=GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model = "meta-llama/llama-4-scout-17b-16e-instruct",
+            messages = self.messages,
+            temperature = 0.2,
+            max_tokens = 1024,
+            top_p = 1,
+            stream = False,
+            stop = None,
+        )
+
+        message = response.choices[0].message.content.strip()
+        parsed_message = self._parse_json_response(message)
+        if self._detect_state_change(parsed_message):
+            return parsed_message
+        self.messages.append({"role": "assistant", "content": message})
+        return parsed_message
     
-    def _classify_intent(self, message_text):
-        """Classify the intent of the patient's message"""
-        # In a real implementation, this would use the LLM to classify intent
-        # For now, we'll use a simple keyword-based approach
-        
-        message_lower = message_text.lower()
-        
-        if any(word in message_lower for word in ["book", "schedule", "appointment", "see doctor"]):
-            return "NEW_APPOINTMENT"
-        
-        elif any(word in message_lower for word in ["reschedule", "change appointment", "different time"]):
-            return "RESCHEDULE"
-        
-        elif any(word in message_lower for word in ["cancel", "delete appointment"]):
-            return "CANCEL_APPOINTMENT"
-        
-        elif any(word in message_lower for word in ["symptoms", "pain", "feeling", "sick"]):
-            return "DESCRIBE_SYMPTOMS"
-        
-        else:
-            return "GENERAL_INQUIRY"
+if __name__ == "__main__":
+    patient_agent = PatientAgent()
+    patient_agent.run_patient_agent()
