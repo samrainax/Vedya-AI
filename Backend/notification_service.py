@@ -25,9 +25,9 @@ logger = logging.getLogger('notification_service')
 NOTIFICATIONS_FILE = os.path.join(os.path.dirname(__file__), "notifications.json")
 APPOINTMENTS_FILE = os.path.join(os.path.dirname(__file__), "appointments.json")
 PORT = 8000
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "ACfccd00529c391c2289ad1b6c4d406fb2")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "82b8033781d6f70383fed5a42ed5119c")
-TWILIO_PHONE_NUMBER = "whatsapp:+14155238886"  # Example Twilio WhatsApp number
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 
 # Notification intervals configuration (in seconds)
 # You can customize these intervals by changing the values below.
@@ -35,7 +35,7 @@ TWILIO_PHONE_NUMBER = "whatsapp:+14155238886"  # Example Twilio WhatsApp number
 # To add a new interval (e.g., "week_before"), add a new key-value pair like:
 # "week_before": 7 * 24 * 60 * 60,  # 1 week
 NOTIFICATION_CONFIG = {
-    "day_before": 24 * 60 * 60,  # 1 day
+    "day_before": 10,  # 1 day
     "hour_before": 1,      # 1 hour (set to 1 second for testing)
 }
 
