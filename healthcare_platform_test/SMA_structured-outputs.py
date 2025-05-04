@@ -1,10 +1,13 @@
-from groq import Groq
+from openai import OpenAI
 import json
 from typing import Optional, List, Dict, Any, Union
 
-GROQ_API_KEY = "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"
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-client = Groq(api_key=GROQ_API_KEY)
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY
+)
 
 # Define structured output schemas
 MODERATOR_SCHEMA = {
