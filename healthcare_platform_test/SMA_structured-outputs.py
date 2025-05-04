@@ -279,7 +279,7 @@ def create_appointment_object(patient_name, patient_number, doctor_name, appoint
     # Generate a unique appointment ID
     try:
         import os
-        appointments_file = 'appointments.json'
+        appointments_file = 'Backend/appointments.json'
         
         # Create the file with empty array if it doesn't exist
         if not os.path.exists(appointments_file):
@@ -330,7 +330,7 @@ def append_appointment_to_json(appointment):
         import json
         import os
         
-        appointments_file = 'appointments.json'
+        appointments_file = 'Backend/appointments.json'
         
         # Create the file with empty array if it doesn't exist
         if not os.path.exists(appointments_file):
