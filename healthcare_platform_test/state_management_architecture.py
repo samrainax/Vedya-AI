@@ -1,12 +1,20 @@
+from openai import OpenAI
+import os
+
 users_state = {}
 
 kb_categoriser = '''General Medicine, Orthopedics, Cardiology'''
 
-from groq import Groq
+users_state = 0
 
-GROQ_API_KEY = "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"
+# Get API key from environment variable, with fallback to hardcoded value for backward compatibility
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-client = Groq(api_key=GROQ_API_KEY)
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY
+)
+
 hospital_doctors = {
     "General Medicine": [
         {"name": "Dr. Anil Kumar", "qualification": "MBBS, MD (General Medicine)", "experience_years": 12},
