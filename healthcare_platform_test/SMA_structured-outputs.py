@@ -1,6 +1,9 @@
 from openai import OpenAI
 import json
 from typing import Optional, List, Dict, Any, Union
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -441,6 +444,8 @@ def generate_reply(incoming_msg, phone_number=""):
             stream=False,
             stop=None,
         )
+
+        print(f"\n[DEBUG] Structured Response: {completion.choices[0].message.content}")
 
         parsed_response = json.loads(completion.choices[0].message.content)
         print(f"\n[DEBUG] Structured Response: {parsed_response}")
