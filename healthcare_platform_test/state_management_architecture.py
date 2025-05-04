@@ -10,6 +10,8 @@ kb_categoriser = '''General Medicine, Orthopedics, Cardiology'''
 # Get API key from environment variable, with fallback to hardcoded value for backward compatibility
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+client_audio = OpenAI(api_key=os.getenv("OPENROUTER_API_KEY"))
+
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY
@@ -397,6 +399,13 @@ def generate_reply(incoming_msg, phone_number=""):
         messages[0]["content"] = prompt
 
         # Send to LLM for analysis
+        if incoming_msg.endswith('mp4'):
+            audio_file = open(incoming_msg, "rb")
+            transcript = client_audio.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+            incoming_msg = transcript.text    
         messages.append({"role": "user", "content": incoming_msg})
         completion = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
