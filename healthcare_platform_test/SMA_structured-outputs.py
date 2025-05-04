@@ -13,7 +13,6 @@ MODERATOR_SCHEMA = {
         "bot_response": {"type": "string"},
         "next_state": {"type": ["integer", "null"], "enum": [0, 1, 2, 3, None]},
         "special_action": {"type": ["string", "null"], "enum": ["cancel", "modify", "show", "help", "reset", "exit", None]},
-        "needs_context": {"type": "boolean"},
         "is_general_conversation": {"type": "boolean"}
     },
     "required": ["bot_response", "next_state", "special_action", "needs_context", "is_general_conversation"]
@@ -382,14 +381,24 @@ def generate_reply(incoming_msg, phone_number=""):
         print("\n[STATE 0] Moderator analyzing query...")
         prompt = f'''You are Vedya, a friendly and helpful hospital receptionist. Your task is to:
         1. Engage in natural conversation with the user
-        2. Transition to State 1 (categorizer) IMMEDIATELY when any health issue is mentioned
-        3. Handle general queries and small talk
-        4. Maintain a friendly and professional tone
+        2. Handle general queries and small talk
+        3. Maintain a friendly and professional tone
+        4. Talk in the language in which the user is speaking. If the user is typing in english characters but words are in hindi, reply in hindi.
+
+        Your main job is to identify the correct state of the user and redirect the conversation to the correct state.
 
         Available states:
         - State 1: Health concern classification (TRANSITION IMMEDIATELY when user mentions any health issue)
         - State 2: Doctor selection (ONLY when user has already selected a category and EXPLICITLY wants to choose a doctor)
         - State 3: Appointment booking (ONLY when user has already selected a doctor and EXPLICITLY wants to book a slot)
+        - Stay in State 0 if the user is not saying anything related to health issues or appointments
+
+        Current Patient Agent Variables:
+            -current_state: {users_state}
+            -current_category: {curr_category}
+            -current_doctor: {curr_doctor}
+            -selected_date: {selected_date}
+            -selected_slot: {selected_slot}
 
         Special cases to handle:
         - "cancel my appointment" -> Handle cancellation
@@ -405,14 +414,15 @@ def generate_reply(incoming_msg, phone_number=""):
         3. Set "is_general_conversation" to true for casual talk
         4. Only set "next_state" to 2 or 3 when user has already selected a category/doctor
         5. If special action is needed, set "special_action" accordingly
-        6. If more context is needed, set "needs_context" to true
 
         Respond with a JSON containing the following keys:
         - "bot_response": a helpful response to the user
         - "next_state": numerical value (0, 1, 2, 3, or null)
         - "special_action": string value (cancel, modify, show, help, reset, exit, or null)
-        - "needs_context": boolean value
         - "is_general_conversation": boolean value
+
+        Important: 
+        - AT NO POINT OF TIME SHOULD YOU GIVE ANY MEDICAL ADVICE. YOU ROLE IS ONLY REDIRECT USER TO THE CORRECT STATE
         '''
         messages[0]["content"] = prompt
 
@@ -491,6 +501,7 @@ def generate_reply(incoming_msg, phone_number=""):
         2. Ask ONLY ONE follow-up question if needed
         3. Classify into: {kb_categoriser}
         4. After classification, ask if they want doctor recommendations
+        5. Talk in the language in which the user is speaking. If the user is typing in english characters but words are in hindi, reply in hindi.
 
         Follow these rules strictly:
         - If user mentions pain, ask only about location
@@ -574,6 +585,7 @@ def generate_reply(incoming_msg, phone_number=""):
         2. Ask the user to choose one from these exact doctors
         3. Wait for their selection
         4. Only after they select a doctor, ask if they want to book an appointment
+        5. Talk in the language in which the user is speaking. If the user is typing in english characters but words are in hindi, reply in hindi.
 
         Important:
         - Only use the doctors listed above
@@ -666,17 +678,17 @@ def generate_reply(incoming_msg, phone_number=""):
         messages[0]["content"] = prompt
 
         # Check if we can extract date from message
-        extracted_date = extract_date(incoming_msg)
-        if extracted_date and extracted_date in available_slots and not selected_date:
-            selected_date = extracted_date
-            print(f"[DEBUG] Date extracted from message: {selected_date}")
+        # extracted_date = extract_date(incoming_msg)
+        # if extracted_date and extracted_date in available_slots and not selected_date:
+        #     selected_date = extracted_date
+        #     print(f"[DEBUG] Date extracted from message: {selected_date}")
         
-        # Check if we can extract time slot from message
-        if selected_date:
-            extracted_slot = extract_time_slot(incoming_msg, available_slots[selected_date])
-            if extracted_slot and not selected_slot:
-                selected_slot = extracted_slot
-                print(f"[DEBUG] Slot extracted from message: {selected_slot}")
+        # # Check if we can extract time slot from message
+        # if selected_date:
+        #     extracted_slot = extract_time_slot(incoming_msg, available_slots[selected_date])
+        #     if extracted_slot and not selected_slot:
+        #         selected_slot = extracted_slot
+        #         print(f"[DEBUG] Slot extracted from message: {selected_slot}")
 
         # Send to LLM for analysis with structured output
         messages.append({"role": "user", "content": incoming_msg})
