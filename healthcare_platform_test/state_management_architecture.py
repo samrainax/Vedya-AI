@@ -5,8 +5,6 @@ users_state = {}
 
 kb_categoriser = '''General Medicine, Orthopedics, Cardiology'''
 
-users_state = 0
-
 # Get API key from environment variable, with fallback to hardcoded value for backward compatibility
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
